@@ -17,24 +17,43 @@
         }
         #controls {
             margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
         }
         button {
             padding: 10px 24px;
             font-size: 18px;
-            background-color: #27ae60;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s;
+            width: 200px;
         }
-        button:hover {
+        /* Micro:bit 按鈕樣式 */
+        #connectSerialBtn {
+            background-color: #3498db;
+        }
+        #connectSerialBtn:hover {
+            background-color: #2980b9;
+        }
+        #connectSerialBtn:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        /* 辨認按鈕樣式 */
+        #toggleBtn {
+            background-color: #27ae60;
+        }
+        #toggleBtn:hover {
             background-color: #2ecc71;
         }
-        button.stop {
+        #toggleBtn.stop {
             background-color: #c0392b;
         }
-        button.stop:hover {
+        #toggleBtn.stop:hover {
             background-color: #e74c3c;
         }
         #camera-container {
@@ -94,6 +113,7 @@
     <h1>郊野公園智能垃圾桶</h1>
 
     <div id="controls">
+        <button id="connectSerialBtn">連接 Micro:bit</button>
         <button id="toggleBtn">開始辨認</button>
     </div>
 
@@ -117,15 +137,63 @@
         const canvas = document.getElementById('overlay');
         const ctx = canvas.getContext('2d');
         const toggleBtn = document.getElementById('toggleBtn');
+        const connectSerialBtn = document.getElementById('connectSerialBtn');
         const textResults = document.getElementById('text-results');
         const rawJson = document.getElementById('raw-json');
 
         let isDetecting = false;
-        let detectionInterval;
+        
+        // Web Serial 變數
+        let serialPort = null;
+        let serialWriter = null;
 
         // 設定 Roboflow API 資訊
         const API_KEY = 's1Lu70khq7Ymo6iCuiFw';
         const API_URL = 'https://serverless.roboflow.com/harrys-workspace-wrtc8/workflows/custom-workflow-2';
+
+        // 0. Micro:bit 序列埠連接邏輯
+        connectSerialBtn.addEventListener('click', async () => {
+            if (!('serial' in navigator)) {
+                alert("你的瀏覽器不支援 Web Serial API。請使用最新版的 Chrome 或 Edge 瀏覽器！");
+                return;
+            }
+
+            try {
+                // 要求使用者選擇序列埠 (Micro:bit)
+                serialPort = await navigator.serial.requestPort();
+                
+                // 開啟序列埠，Micro:bit 預設 Baud Rate 為 115200
+                await serialPort.open({ baudRate: 115200 });
+                
+                // 設定寫入串流
+                const textEncoder = new TextEncoderStream();
+                const writableStreamClosed = textEncoder.readable.pipeTo(serialPort.writable);
+                serialWriter = textEncoder.writable.getWriter();
+
+                // 更新按鈕狀態
+                connectSerialBtn.innerText = "Micro:bit 已連接 ✅";
+                connectSerialBtn.disabled = true;
+                connectSerialBtn.style.backgroundColor = "#27ae60";
+                
+                alert("成功連接 Micro:bit！");
+            } catch (error) {
+                console.error("連接序列埠失敗:", error);
+                alert("連接失敗或使用者取消：" + error.message);
+            }
+        });
+
+        // 發送文字到 Micro:bit 的通用函數
+        async function sendToMicrobit(text) {
+            if (serialWriter) {
+                try {
+                    // 加上 \n (換行符號)，讓 Micro:bit 的 "serial read until new line" 可以正常運作
+                    await serialWriter.write(text + "\n");
+                    console.log(`已發送至 Micro:bit: ${text}`);
+                } catch (error) {
+                    console.error("寫入 Micro:bit 失敗:", error);
+                }
+            }
+        }
 
         // 1. 初始化攝影機
         async function setupCamera() {
@@ -135,7 +203,6 @@
                 });
                 video.srcObject = stream;
                 
-                // 等待影片讀取完成，以設定正確的 canvas 大小
                 video.onloadedmetadata = () => {
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
@@ -153,7 +220,6 @@
             hiddenCanvas.height = video.videoHeight;
             const hiddenCtx = hiddenCanvas.getContext('2d');
             hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            // 轉為 base64 字串，並移除 data:image/jpeg;base64, 前綴
             const dataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.8);
             return dataUrl.split(',')[1]; 
         }
@@ -171,18 +237,13 @@
                     body: JSON.stringify({
                         api_key: API_KEY,
                         inputs: { 
-                            // API 接受 base64 格式以支援鏡頭實時畫面
                             "image": { "type": "base64", "value": base64Image } 
                         }
                     })
                 });
 
                 const result = await response.json();
-                
-                // 顯示 Raw JSON
                 rawJson.innerText = JSON.stringify(result, null, 2);
-
-                // 處理並繪製結果
                 processResults(result);
 
             } catch (error) {
@@ -190,7 +251,6 @@
                 rawJson.innerText = "Error: " + error.message;
             }
 
-            // 繼續下一次辨識，設定 500 毫秒延遲避免超出 API 速率限制
             if (isDetecting) {
                 setTimeout(detect, 500);
             }
@@ -198,12 +258,10 @@
 
         // 4. 解析結果與畫框
         function processResults(result) {
-            // 清除上一幀的畫布
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             let resultText = "";
             let predictions = [];
 
-            // 🌟 抓取深層的 predictions 陣列
             if (result && result.outputs && result.outputs.length > 0) {
                 const firstOutput = result.outputs[0];
                 if (firstOutput.predictions && firstOutput.predictions.predictions) {
@@ -218,48 +276,41 @@
 
             let hasValidDetection = false;
 
-            // 繪製每個預測結果
             predictions.forEach(pred => {
                 const label = pred.class || "Unknown";
-                
-                // 🛑 動態設定門檻：如果是野豬(boar)必須 > 80% (0.8)，其他物品維持 > 60% (0.6)
                 const threshold = (label === "boar") ? 0.8 : 0.6;
 
-                // 判斷是否大於我們設定的門檻
                 if (pred.confidence > threshold) {
-                    
-                    // 確認預測資料是否有座標與長寬
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
                         
                         hasValidDetection = true;
 
-                        // Roboflow 給的是中心點 (x,y)，需要轉換成左上角座標來畫框
                         const x = pred.x - pred.width / 2;
                         const y = pred.y - pred.height / 2;
                         const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
 
-                        // 畫綠色方框
-                        ctx.strokeStyle = "#2ecc71"; // 綠色
+                        ctx.strokeStyle = "#2ecc71";
                         ctx.lineWidth = 3;
                         ctx.strokeRect(x, y, pred.width, pred.height);
 
-                        // 畫標籤背景
                         ctx.fillStyle = "#2ecc71";
                         const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
                         ctx.fillRect(x, y - 25, textWidth + 10, 25);
 
-                        // 寫入標籤與信心度 (%)
                         ctx.fillStyle = "#ffffff";
                         ctx.font = "16px Arial";
                         ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
 
-                        // 組合下方文字結果
                         resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
+
+                        // 🌟 這裡呼叫 Micro:bit 通訊！如果辨識到野豬，就傳送 "boar"
+                        if (label === "boar") {
+                            sendToMicrobit("boar");
+                        }
                     }
                 }
             });
 
-            // 根據是否有符合條件的物體來更新文字
             if (hasValidDetection) {
                 textResults.innerHTML = `<ul>${resultText}</ul>`;
             } else {
@@ -275,16 +326,15 @@
                 toggleBtn.innerText = "停止辨認";
                 toggleBtn.classList.add("stop");
                 textResults.innerHTML = "偵測中...";
-                detect(); // 開始迴圈
+                detect();
             } else {
                 toggleBtn.innerText = "開始辨認";
                 toggleBtn.classList.remove("stop");
                 textResults.innerHTML = "已停止偵測";
-                ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除畫面上的框
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
             }
         });
 
-        // 啟動頁面時先開啟鏡頭
         setupCamera();
 
     </script>
