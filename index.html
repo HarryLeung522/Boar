@@ -220,8 +220,13 @@
 
             // 繪製每個預測結果
             predictions.forEach(pred => {
-                // 🛑 新增過濾條件：信心度必須大於 0.6 (60%) 才會進行標示
-                if (pred.confidence > 0.6) {
+                const label = pred.class || "Unknown";
+                
+                // 🛑 動態設定門檻：如果是野豬(boar)必須 > 80% (0.8)，其他物品維持 > 60% (0.6)
+                const threshold = (label === "boar") ? 0.8 : 0.6;
+
+                // 判斷是否大於我們設定的門檻
+                if (pred.confidence > threshold) {
                     
                     // 確認預測資料是否有座標與長寬
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
@@ -232,7 +237,6 @@
                         const x = pred.x - pred.width / 2;
                         const y = pred.y - pred.height / 2;
                         const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
-                        const label = pred.class || "Unknown";
 
                         // 畫綠色方框
                         ctx.strokeStyle = "#2ecc71"; // 綠色
@@ -259,7 +263,7 @@
             if (hasValidDetection) {
                 textResults.innerHTML = `<ul>${resultText}</ul>`;
             } else {
-                textResults.innerHTML = "未偵測到信心度超過 60% 的物體";
+                textResults.innerHTML = "未偵測到符合信心度門檻的物體（例如 boar 需 > 80%）";
             }
         }
 
