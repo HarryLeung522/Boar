@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>郊野公園智能垃圾桶</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body {
             font-family: "Microsoft JhengHei", Arial, sans-serif;
@@ -12,11 +13,8 @@
             margin: 0;
             padding: 20px;
         }
-        h1 {
-            color: #2c3e50;
-        }
+        h1 { color: #2c3e50; }
         
-        /* 頂部控制列 */
         #controls {
             margin-bottom: 20px;
             display: flex;
@@ -34,7 +32,6 @@
             transition: background-color 0.3s;
         }
 
-        /* 各種按鈕的顏色設定 */
         #connectSerialBtn { background-color: #3498db; }
         #connectSerialBtn:hover { background-color: #2980b9; }
         #connectSerialBtn:disabled { background-color: #95a5a6; cursor: not-allowed; }
@@ -50,7 +47,6 @@
         .small-btn { background-color: #7f8c8d; font-size: 14px; padding: 6px 12px; margin-bottom: 10px; }
         .small-btn:hover { background-color: #95a5a6; }
 
-        /* 主畫面佈局 (鏡頭 + 右側按鈕) */
         .main-display {
             display: flex;
             justify-content: center;
@@ -59,7 +55,6 @@
             margin-bottom: 20px;
         }
 
-        /* 鏡頭區塊 */
         #camera-container {
             position: relative;
             display: inline-block;
@@ -68,29 +63,32 @@
             overflow: hidden;
             background-color: #000;
         }
-        video {
-            display: block;
-            width: 640px;
-            height: 480px;
-            object-fit: cover;
-        }
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 640px;
-            height: 480px;
-            pointer-events: none;
-        }
+        video { display: block; width: 640px; height: 480px; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; pointer-events: none; }
 
-        /* 右側按鈕面板 */
         .side-panel {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px;
+            width: 240px;
         }
 
-        /* 資訊區塊 */
+        /* 🌟 QR Code 狀態列樣式 */
+        .qr-status {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #7f8c8d;
+            border: 2px solid #bdc3c7;
+        }
+        .qr-status.detected {
+            background-color: #e8f8f5;
+            color: #27ae60;
+            border-color: #2ecc71;
+        }
+
         .info-box {
             width: 640px;
             margin: 0 auto 20px auto;
@@ -101,25 +99,13 @@
             text-align: left;
         }
         .info-box h3 {
-            margin-top: 0;
-            color: #34495e;
-            border-bottom: 2px solid #ecf0f1;
-            padding-bottom: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px;
+            display: flex; justify-content: space-between; align-items: center;
         }
         pre {
-            background-color: #2c3e50;
-            color: #ecf0f1;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none; /* 預設隱藏 JSON */
+            background-color: #2c3e50; color: #ecf0f1; padding: 10px; border-radius: 5px;
+            overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto;
+            display: none;
         }
     </style>
 </head>
@@ -141,6 +127,10 @@
         <div class="side-panel">
             <button class="side-btn" onclick="alert('開啟垃圾桶及存取積分功能建置中...')">開啟垃圾桶及存取積分</button>
             <button class="side-btn" onclick="alert('現在位置及相鄰垃圾桶功能建置中...')">現在位置及相鄰垃圾桶</button>
+            
+            <div id="qrStatusBox" class="qr-status">
+                是否偵測到QR code：無
+            </div>
         </div>
     </div>
 
@@ -150,10 +140,7 @@
     </div>
 
     <div class="info-box">
-        <h3>
-            網站回傳資訊 (Raw JSON)
-            <button id="toggleJsonBtn" class="small-btn">展開資訊</button>
-        </h3>
+        <h3>網站回傳資訊 (Raw JSON) <button id="toggleJsonBtn" class="small-btn">展開資訊</button></h3>
         <pre id="raw-json">尚無資料</pre>
     </div>
 
@@ -165,186 +152,188 @@
         const connectSerialBtn = document.getElementById('connectSerialBtn');
         const textResults = document.getElementById('text-results');
         const rawJson = document.getElementById('raw-json');
+        const qrStatusBox = document.getElementById('qrStatusBox');
         
-        // 🌟 新增的 JSON 開關邏輯
+        // 🌟 請把剛才部署出來的 Web App URL 貼在這裡 (保留引號)
+        const GOOGLE_SHEET_API_URL = "填入你的_GOOGLE_APPS_SCRIPT_URL_在這裡";
+
         const toggleJsonBtn = document.getElementById('toggleJsonBtn');
         toggleJsonBtn.addEventListener('click', () => {
             if (rawJson.style.display === 'none' || rawJson.style.display === '') {
-                rawJson.style.display = 'block';
-                toggleJsonBtn.innerText = '收起資訊';
+                rawJson.style.display = 'block'; toggleJsonBtn.innerText = '收起資訊';
             } else {
-                rawJson.style.display = 'none';
-                toggleJsonBtn.innerText = '展開資訊';
+                rawJson.style.display = 'none'; toggleJsonBtn.innerText = '展開資訊';
             }
         });
 
         let isDetecting = false;
-        
-        // Web Serial 變數
         let serialPort = null;
         let serialWriter = null;
-
-        // 用來記錄上一次發送 boar 的時間
         let lastBoarSendTime = 0; 
+        
+        // 🌟 記錄最後一次發送 QR 資料的時間 (冷卻用)
+        let lastQRSendTime = 0;
 
-        // 設定 Roboflow API 資訊
         const API_KEY = 's1Lu70khq7Ymo6iCuiFw';
         const API_URL = 'https://serverless.roboflow.com/harrys-workspace-wrtc8/workflows/custom-workflow-2';
 
-        // 0. Micro:bit 序列埠連接邏輯
         connectSerialBtn.addEventListener('click', async () => {
-            if (!('serial' in navigator)) {
-                alert("你的瀏覽器不支援 Web Serial API。請使用最新版的 Chrome 或 Edge 瀏覽器！");
-                return;
-            }
-
+            if (!('serial' in navigator)) { alert("瀏覽器不支援 Web Serial API"); return; }
             try {
                 serialPort = await navigator.serial.requestPort();
                 await serialPort.open({ baudRate: 115200 });
-                
                 const textEncoder = new TextEncoderStream();
-                const writableStreamClosed = textEncoder.readable.pipeTo(serialPort.writable);
+                textEncoder.readable.pipeTo(serialPort.writable);
                 serialWriter = textEncoder.writable.getWriter();
-
                 connectSerialBtn.innerText = "Micro:bit 已連接 ✅";
                 connectSerialBtn.disabled = true;
                 connectSerialBtn.style.backgroundColor = "#27ae60";
-                
-                alert("成功連接 Micro:bit！");
-            } catch (error) {
-                console.error("連接序列埠失敗:", error);
-                alert("連接失敗或使用者取消：" + error.message);
-            }
+            } catch (error) { console.error("連接序列埠失敗:", error); }
         });
 
-        // 發送文字到 Micro:bit
         async function sendToMicrobit(text) {
             if (serialWriter) {
-                try {
-                    await serialWriter.write(text + "\n");
-                    console.log(`已發送至 Micro:bit: ${text}`);
-                } catch (error) {
-                    console.error("寫入 Micro:bit 失敗:", error);
-                }
+                try { await serialWriter.write(text + "\n"); } catch (error) { console.error("寫入 Micro:bit 失敗:", error); }
             }
         }
 
-        // 1. 初始化攝影機
         async function setupCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480 }
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
                 video.srcObject = stream;
-                
-                video.onloadedmetadata = () => {
-                    canvas.width = video.videoWidth;
-                    canvas.height = video.videoHeight;
-                };
-            } catch (error) {
-                console.error("無法存取攝影機:", error);
-                alert("無法存取攝影機，請確認已授權瀏覽器使用鏡頭。");
+                video.onloadedmetadata = () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; };
+            } catch (error) { alert("無法存取攝影機。"); }
+        }
+
+        function getFrameImageData() {
+            const hiddenCanvas = document.createElement('canvas');
+            hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
+            const hiddenCtx = hiddenCanvas.getContext('2d');
+            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            return hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+        }
+
+        // 🌟 傳送資料到 Google Sheet 的函數
+        function sendToGoogleSheet() {
+            if (GOOGLE_SHEET_API_URL === "填入你的_GOOGLE_APPS_SCRIPT_URL_在這裡") {
+                console.log("尚未設定 Google Apps Script 網址，跳過寫入。");
+                return;
+            }
+
+            const now = new Date();
+            // 格式化日期 YYYY/MM/DD
+            const dateStr = now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
+            // 格式化時間 HH:MM:SS
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+
+            const payload = {
+                colA: "Cherry",
+                colB: dateStr,
+                colC: timeStr,
+                colD: "500",
+                colE: "賺取積分",
+                colF: "賺取積分"
+            };
+
+            // 使用 no-cors 模式發送，避免瀏覽器擋下跨域請求
+            fetch(GOOGLE_SHEET_API_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(() => {
+                console.log("資料已送出至 Google Sheet！");
+            }).catch(error => {
+                console.error("寫入表格失敗:", error);
+            });
+        }
+
+        // 🌟 獨立的 QR Code 掃描邏輯
+        function checkQRCode() {
+            if (!isDetecting || video.videoWidth === 0) return;
+            
+            const imageData = getFrameImageData();
+            // 使用 jsQR 解析圖片內的 QR Code
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+            if (code) {
+                // 偵測到 QR Code 的 UI 變化
+                qrStatusBox.innerText = "是否偵測到QR code：有 ✅";
+                qrStatusBox.classList.add("detected");
+
+                const currentTime = Date.now();
+                // 10 秒鐘防連刷保護機制
+                if (currentTime - lastQRSendTime >= 10000) {
+                    sendToGoogleSheet();
+                    lastQRSendTime = currentTime;
+                }
+            } else {
+                // 未偵測到的 UI 變化
+                qrStatusBox.innerText = "是否偵測到QR code：無";
+                qrStatusBox.classList.remove("detected");
             }
         }
 
-        // 2. 擷取畫面並轉為 Base64
-        function getFrameBase64() {
-            const hiddenCanvas = document.createElement('canvas');
-            hiddenCanvas.width = video.videoWidth;
-            hiddenCanvas.height = video.videoHeight;
-            const hiddenCtx = hiddenCanvas.getContext('2d');
-            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            const dataUrl = hiddenCanvas.toDataURL('image/jpeg', 0.8);
-            return dataUrl.split(',')[1]; 
-        }
-
-        // 3. 執行辨識 (呼叫 API)
         async function detect() {
             if (!isDetecting) return;
 
-            const base64Image = getFrameBase64();
+            // 執行 Roboflow 辨識
+            const hiddenCanvas = document.createElement('canvas');
+            hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
+            const hiddenCtx = hiddenCanvas.getContext('2d');
+            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            const base64Image = hiddenCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
 
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        api_key: API_KEY,
-                        inputs: { 
-                            "image": { "type": "base64", "value": base64Image } 
-                        }
-                    })
+                    body: JSON.stringify({ api_key: API_KEY, inputs: { "image": { "type": "base64", "value": base64Image } } })
                 });
-
                 const result = await response.json();
                 rawJson.innerText = JSON.stringify(result, null, 2);
                 processResults(result);
-
             } catch (error) {
                 console.error("API 請求失敗:", error);
-                rawJson.innerText = "Error: " + error.message;
             }
 
-            if (isDetecting) {
-                setTimeout(detect, 500);
-            }
+            if (isDetecting) { setTimeout(detect, 500); }
         }
 
-        // 4. 解析結果與畫框
         function processResults(result) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let resultText = "";
-            let predictions = [];
+            let resultText = ""; let predictions = [];
 
             if (result && result.outputs && result.outputs.length > 0) {
                 const firstOutput = result.outputs[0];
-                if (firstOutput.predictions && firstOutput.predictions.predictions) {
-                    predictions = firstOutput.predictions.predictions;
-                }
+                if (firstOutput.predictions && firstOutput.predictions.predictions) predictions = firstOutput.predictions.predictions;
             }
 
-            if (predictions.length === 0) {
-                textResults.innerHTML = "未偵測到物體";
-                return;
-            }
-
+            if (predictions.length === 0) { textResults.innerHTML = "未偵測到物體"; return; }
             let hasValidDetection = false;
 
             predictions.forEach(pred => {
                 const label = pred.class || "Unknown";
                 const threshold = (label === "boar") ? 0.8 : 0.6;
-
                 if (pred.confidence > threshold) {
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
-                        
                         hasValidDetection = true;
-
-                        const x = pred.x - pred.width / 2;
-                        const y = pred.y - pred.height / 2;
+                        const x = pred.x - pred.width / 2; const y = pred.y - pred.height / 2;
                         const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
 
-                        ctx.strokeStyle = "#2ecc71";
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(x, y, pred.width, pred.height);
-
-                        ctx.fillStyle = "#2ecc71";
-                        const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
+                        ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 3; ctx.strokeRect(x, y, pred.width, pred.height);
+                        ctx.fillStyle = "#2ecc71"; const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
                         ctx.fillRect(x, y - 25, textWidth + 10, 25);
+                        ctx.fillStyle = "#ffffff"; ctx.font = "16px Arial"; ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
 
-                        ctx.fillStyle = "#ffffff";
-                        ctx.font = "16px Arial";
-                        ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
-
-                        // 加入冷卻時間邏輯
                         if (label === "boar") {
                             const currentTime = Date.now();
                             if (currentTime - lastBoarSendTime >= 10000) {
-                                sendToMicrobit("boar");
-                                lastBoarSendTime = currentTime; 
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: red;">(已發送訊號至 Micro:bit!)</span></li>`;
+                                sendToMicrobit("boar"); lastBoarSendTime = currentTime; 
+                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: red;">(已發送訊號!)</span></li>`;
                             } else {
                                 const remainTime = Math.ceil((10000 - (currentTime - lastBoarSendTime)) / 1000);
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: gray;">(訊號冷卻中... 剩餘 ${remainTime} 秒)</span></li>`;
+                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: gray;">(冷卻中... ${remainTime} 秒)</span></li>`;
                             }
                         } else {
                             resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
@@ -352,31 +341,32 @@
                     }
                 }
             });
-
-            if (hasValidDetection) {
-                textResults.innerHTML = `<ul>${resultText}</ul>`;
-            } else {
-                textResults.innerHTML = "未偵測到符合信心度門檻的物體（例如 boar 需 > 80%）";
-            }
+            if (hasValidDetection) textResults.innerHTML = `<ul>${resultText}</ul>`;
+            else textResults.innerHTML = "未偵測到符合門檻的物體";
         }
 
-        // 5. 按鈕控制
         toggleBtn.addEventListener('click', () => {
             isDetecting = !isDetecting;
-            
             if (isDetecting) {
-                toggleBtn.innerText = "停止辨認";
-                toggleBtn.classList.add("stop");
+                toggleBtn.innerText = "停止辨認"; toggleBtn.classList.add("stop");
                 textResults.innerHTML = "偵測中...";
-                detect();
+                detect(); // 啟動物體辨識
+                
+                // 🌟 啟動 QR Code 掃描 (每 200 毫秒掃描一次，反應更快)
+                qrScanInterval = setInterval(checkQRCode, 200);
             } else {
-                toggleBtn.innerText = "開始辨認";
-                toggleBtn.classList.remove("stop");
+                toggleBtn.innerText = "開始辨認"; toggleBtn.classList.remove("stop");
                 textResults.innerHTML = "已停止偵測";
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // 🌟 停止 QR Code 掃描並重置狀態
+                clearInterval(qrScanInterval);
+                qrStatusBox.innerText = "是否偵測到QR code：無";
+                qrStatusBox.classList.remove("detected");
             }
         });
 
+        let qrScanInterval; // 宣告計時器變數
         setupCamera();
 
     </script>
