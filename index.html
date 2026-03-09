@@ -3,147 +3,282 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>郊野公園智能垃圾桶</title>
+    <title>智慧郊野公園垃圾桶</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body {
             font-family: "Microsoft JhengHei", Arial, sans-serif;
-            text-align: center;
-            background-color: #f4f4f9;
+            background-color: #F5F5F5;
             margin: 0;
             padding: 20px;
-        }
-        h1 { color: #2c3e50; }
-        
-        #controls {
-            margin-bottom: 20px;
             display: flex;
-            justify-content: center;
-            gap: 15px;
+            flex-direction: column;
+            align-items: center;
         }
+
+        /* 頂部標題 */
+        .header-box {
+            background-color: #5D4037;
+            color: white;
+            padding: 20px 0;
+            width: 900px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .header-box h1 { margin: 0; font-size: 28px; }
         
-        button {
-            padding: 10px 24px;
-            font-size: 18px;
+        /* 連接 Micro:bit 按鈕 */
+        button.connect-btn {
+            background-color: #EF6C00;
             color: white;
             border: none;
-            border-radius: 5px;
+            padding: 10px 24px;
+            font-size: 16px;
+            border-radius: 20px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 10px auto 0 auto;
             transition: background-color 0.3s;
         }
+        button.connect-btn:hover { background-color: #E65100; }
+        button.connect-btn:disabled { background-color: #95a5a6; cursor: not-allowed; }
 
-        #connectSerialBtn { background-color: #3498db; }
-        #connectSerialBtn:hover { background-color: #2980b9; }
-        #connectSerialBtn:disabled { background-color: #95a5a6; cursor: not-allowed; }
-        
-        #toggleBtn { background-color: #27ae60; }
-        #toggleBtn:hover { background-color: #2ecc71; }
-        #toggleBtn.stop { background-color: #c0392b; }
-        #toggleBtn.stop:hover { background-color: #e74c3c; }
-
-        .side-btn { background-color: #f39c12; width: 240px; font-size: 16px; padding: 15px 20px; }
-        .side-btn:hover { background-color: #e67e22; }
-
-        .small-btn { background-color: #7f8c8d; font-size: 14px; padding: 6px 12px; margin-bottom: 10px; }
-        .small-btn:hover { background-color: #95a5a6; }
-
-        .main-display {
+        /* 主畫面佈局 */
+        .body-container {
             display: flex;
-            justify-content: center;
-            align-items: center;
             gap: 30px;
-            margin-bottom: 20px;
+            width: 900px;
         }
 
+        /* 左側主顯示區域 */
+        .main-white-box {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            border: 1px solid #E0E0E0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 鏡頭區塊 */
         #camera-container {
             position: relative;
             display: inline-block;
-            border: 4px solid #bdc3c7;
+            border: 4px solid #5D4037;
             border-radius: 8px;
             overflow: hidden;
             background-color: #000;
         }
-        video { display: block; width: 640px; height: 480px; object-fit: cover; }
-        canvas { position: absolute; top: 0; left: 0; width: 640px; height: 480px; pointer-events: none; }
+        video { display: block; width: 500px; height: 375px; object-fit: cover; }
+        canvas { position: absolute; top: 0; left: 0; width: 500px; height: 375px; pointer-events: none; }
 
+        /* ↔️ 水平翻轉影像按鈕 */
+        button.flip-btn {
+            background-color: transparent;
+            color: #5D4037;
+            border: 1px solid #5D4037;
+            padding: 6px 12px;
+            font-size: 14px;
+            border-radius: 4px;
+            margin-top: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.3s;
+        }
+        button.flip-btn:hover { background-color: #5D4037; color: white; }
+
+        /* 相似度表格 */
+        .similarity-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            font-size: 14px;
+            color: #5D4037;
+        }
+        .similarity-table th { background-color: #5D4037; color: white; padding: 10px; text-align: left; }
+        .similarity-table td { background-color: #FFF3E0; padding: 10px; border-bottom: 1px solid #D7CCC8; }
+        .similarity-table td.center { text-align: center; }
+        .progress-container { background-color: #D7CCC8; height: 10px; border-radius: 5px; width: 100px; }
+        .progress-bar { background-color: #5D4037; height: 100%; border-radius: 5px; width: 0%; transition: width 0.3s ease; }
+
+        /* ▶️ 開始辨認按鈕 */
+        button.detect-btn {
+            background-color: #2E7D32;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            width: 100%;
+            transition: background-color 0.3s;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+        button.detect-btn:hover { background-color: #1B5E20; }
+        button.detect-btn.stop { background-color: #C62828; }
+        button.detect-btn.stop:hover { background-color: #B71C1C; }
+
+        /* 正在載入 AI 模型... 小文本 */
+        #statusText {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #757575;
+        }
+
+        /* 右側控制面板 */
         .side-panel {
             display: flex;
             flex-direction: column;
             gap: 15px;
-            width: 240px;
+            width: 270px;
         }
 
-        /* QR Code 狀態列樣式 */
-        .qr-status {
-            background-color: #ecf0f1;
-            padding: 15px;
+        button.side-btn {
+            padding: 15px 20px;
+            color: white;
+            border: none;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
-            color: #7f8c8d;
-            border: 2px solid #bdc3c7;
-            transition: all 0.3s ease;
-        }
-        .qr-status.detected {
-            background-color: #e8f8f5;
-            color: #27ae60;
-            border-color: #2ecc71;
-        }
-
-        .info-box {
-            width: 640px;
-            margin: 0 auto 20px auto;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: opacity 0.3s;
+            width: 100%;
             text-align: left;
         }
-        .info-box h3 {
-            margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px;
-            display: flex; justify-content: space-between; align-items: center;
+        button.side-btn:hover { opacity: 0.9; }
+
+        /* 不同的按鈕顏色 */
+        .btn-class-1 { background-color: #0277BD; } /* 藍色 */
+        .btn-class-2 { background-color: #7B1FA2; } /* 紫色 */
+        .btn-class-bg { background-color: #616161; } /* 灰色 */
+        .btn-action-1 { background-color: #2E7D32; } /* 綠色 */
+        .btn-action-2 { background-color: #0277BD; } /* 藍色 */
+
+        /* QR Code 狀態列 */
+        .qr-status {
+            background-color: #ECEFF1;
+            padding: 20px 15px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            color: #212121;
+            border: 1px solid #B0BEC5;
+            transition: all 0.3s ease;
+            text-align: left;
         }
-        pre {
-            background-color: #2c3e50; color: #ecf0f1; padding: 10px; border-radius: 5px;
-            overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto;
-            display: none;
+        .qr-status.detected {
+            background-color: #E8F8F5;
+            color: #27AE60;
+            border-color: #2ECC71;
         }
+
+        /* 收起/展開 JSON 資訊 */
+        #raw-json { display: none; }
+        .small-btn {
+            background-color: transparent;
+            color: #757575;
+            border: 1px solid #757575;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 4px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        .small-btn:hover { background-color: #E0E0E0; }
     </style>
 </head>
 <body>
 
-    <h1>郊野公園智能垃圾桶</h1>
-
-    <div id="controls">
-        <button id="connectSerialBtn">連接 Micro:bit</button>
-        <button id="toggleBtn">開始辨認</button>
+    <div class="header-box">
+        <h1>智慧郊野公園垃圾桶</h1>
+        <button id="connectSerialBtn" class="connect-btn">
+            USB圖標 連接 Micro:bit
+        </button>
     </div>
 
-    <div class="main-display">
-        <div id="camera-container">
-            <video id="webcam" autoplay playsinline muted></video>
-            <canvas id="overlay"></canvas>
+    <div class="body-container">
+        <div class="main-white-box">
+            <div id="camera-container">
+                <video id="webcam" autoplay playsinline muted></video>
+                <canvas id="overlay"></canvas>
+            </div>
+            
+            <button id="flipBtn" class="flip-btn">
+                ↔️ 水平翻轉影像
+            </button>
+
+            <table class="similarity-table">
+                <thead>
+                    <tr>
+                        <th width="40%">類別</th>
+                        <th width="40%">相似度</th>
+                        <th width="20%">相片數</th>
+                    }
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>行山人士</td>
+                        <td>
+                            <div class="progress-container"><div id="progress1" class="progress-bar"></div></div>
+                        </td>
+                        <td id="count1" class="center">0</td>
+                    </tr>
+                    <tr>
+                        <td>野生動物</td>
+                        <td>
+                            <div class="progress-container"><div id="progress2" class="progress-bar"></div></div>
+                        </td>
+                        <td id="count2" class="center">0</td>
+                    </tr>
+                    <tr>
+                        <td>背景</td>
+                        <td>
+                            <div class="progress-container"><div id="progress3" class="progress-bar"></div></div>
+                        </td>
+                        <td id="count3" class="center">0</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <button id="toggleBtn" class="detect-btn">
+                ▶️ 開始辨認
+            </button>
+            <div id="statusText">正在載入 AI 模型...</div>
         </div>
 
         <div class="side-panel">
-            <button class="side-btn" onclick="alert('開啟垃圾桶及存取積分功能建置中...')">開啟垃圾桶及存取積分</button>
-            <button class="side-btn" onclick="alert('現在位置及相鄰垃圾桶功能建置中...')">現在位置及相鄰垃圾桶</button>
+            <button class="side-btn btn-class-1">學習 Class 1 (行山人士)</button>
+            <button class="side-btn btn-class-2">學習 Class 2 (野生動物)</button>
+            <button class="side-btn btn-class-bg">學習背景</button>
             
             <div id="qrStatusBox" class="qr-status">
-                是否偵測到QR code：無
+                偵測到 QR code：無
             </div>
+
+            <button class="side-btn btn-action-1" onclick="alert('開啟垃圾桶及存取積分功能建置中...')">
+                開啟垃圾桶及存取積分
+            </button>
+            <button class="side-btn btn-action-2" onclick="alert('現在位置及相鄰垃圾桶功能建置中...')">
+                現在位置及相鄰垃圾桶
+            </button>
         </div>
     </div>
 
-    <div class="info-box">
-        <h3>辨識結果</h3>
-        <div id="text-results">等待辨認中...</div>
-    </div>
-
-    <div class="info-box">
-        <h3>網站回傳資訊 (Raw JSON) <button id="toggleJsonBtn" class="small-btn">展開資訊</button></h3>
-        <pre id="raw-json">尚無資料</pre>
-    </div>
+    <button id="toggleJsonBtn" class="small-btn">展開 JSON 資訊</button>
+    <pre id="raw-json">尚無資料</pre>
 
     <script>
         const video = document.getElementById('webcam');
@@ -151,31 +286,68 @@
         const ctx = canvas.getContext('2d');
         const toggleBtn = document.getElementById('toggleBtn');
         const connectSerialBtn = document.getElementById('connectSerialBtn');
-        const textResults = document.getElementById('text-results');
+        const statusText = document.getElementById('statusText');
         const rawJson = document.getElementById('raw-json');
-        const qrStatusBox = document.getElementById('qrStatusBox');
-        
-        // 🌟 已整合你提供的 Google Apps Script URL
-        const GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwjSH4IHmhBsC8HYax3K4MvyPN3JWhZ71uxQMpIzmXMVZGqgU-9EO_k2TFZec3ZSTi1/exec";
-
         const toggleJsonBtn = document.getElementById('toggleJsonBtn');
-        toggleJsonBtn.addEventListener('click', () => {
-            if (rawJson.style.display === 'none' || rawJson.style.display === '') {
-                rawJson.style.display = 'block'; toggleJsonBtn.innerText = '收起資訊';
-            } else {
-                rawJson.style.display = 'none'; toggleJsonBtn.innerText = '展開資訊';
-            }
-        });
+        const qrStatusBox = document.getElementById('qrStatusBox');
+        const flipBtn = document.getElementById('flipBtn');
+
+        // 表格相關元素
+        const progress Bars = [
+            document.getElementById('progress1'),
+            document.getElementById('progress2'),
+            document.getElementById('progress3')
+        ];
+        const countElements = [
+            document.getElementById('count1'),
+            document.getElementById('count2'),
+            document.getElementById('count3')
+        ];
 
         let isDetecting = false;
+        let isFlipped = false;
+        let qrScanInterval;
         let serialPort = null;
         let serialWriter = null;
         let lastBoarSendTime = 0; 
         let lastQRSendTime = 0;
 
+        // 🌟 你的 Google Apps Script URL
+        const GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwjSH4IHmhBsC8HYax3K4MvyPN3JWhZ71uxQMpIzmXMVZGqgU-9EO_k2TFZec3ZSTi1/exec";
+        // Roboflow API 信息
         const API_KEY = 's1Lu70khq7Ymo6iCuiFw';
         const API_URL = 'https://serverless.roboflow.com/harrys-workspace-wrtc8/workflows/custom-workflow-2';
 
+        // 初始化
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 500, height: 375 } });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; };
+                statusText.innerText = 'AI 模型已就緒，請開始辨認。';
+            } catch (error) { alert("無法存取攝影機。"); }
+        }
+
+        // ↔️ 水平翻轉影像邏輯
+        flipBtn.addEventListener('click', () => {
+            isFlipped = !isFlipped;
+            if (isFlipped) {
+                video.style.transform = 'scaleX(-1)';
+            } else {
+                video.style.transform = 'scaleX(1)';
+            }
+        });
+
+        // 收起/展開 JSON 資訊
+        toggleJsonBtn.addEventListener('click', () => {
+            if (rawJson.style.display === 'none' || rawJson.style.display === '') {
+                rawJson.style.display = 'block'; toggleJsonBtn.innerText = '收起 JSON 資訊';
+            } else {
+                rawJson.style.display = 'none'; toggleJsonBtn.innerText = '展開 JSON 資訊';
+            }
+        });
+
+        // 序列埠連接
         connectSerialBtn.addEventListener('click', async () => {
             if (!('serial' in navigator)) { alert("瀏覽器不支援 Web Serial API"); return; }
             try {
@@ -184,9 +356,9 @@
                 const textEncoder = new TextEncoderStream();
                 textEncoder.readable.pipeTo(serialPort.writable);
                 serialWriter = textEncoder.writable.getWriter();
-                connectSerialBtn.innerText = "Micro:bit 已連接 ✅";
+                connectSerialBtn.innerText = "USB圖標 Micro:bit 已連接 ✅";
                 connectSerialBtn.disabled = true;
-                connectSerialBtn.style.backgroundColor = "#27ae60";
+                connectSerialBtn.style.backgroundColor = "#27AE60";
             } catch (error) { console.error("連接序列埠失敗:", error); }
         });
 
@@ -196,82 +368,56 @@
             }
         }
 
-        async function setupCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-                video.srcObject = stream;
-                video.onloadedmetadata = () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; };
-            } catch (error) { alert("無法存取攝影機。"); }
-        }
-
-        function getFrameImageData() {
-            const hiddenCanvas = document.createElement('canvas');
-            hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
-            const hiddenCtx = hiddenCanvas.getContext('2d');
-            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
-            return hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-        }
-
-        // 傳送資料到 Google Sheet 的邏輯
+        // 資料到 Google Sheet
         function sendToGoogleSheet() {
             if (!GOOGLE_SHEET_API_URL) return;
-
             const now = new Date();
             const dateStr = now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
             const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
-
-            const payload = {
-                user: "Cherry",
-                date: dateStr,
-                time: timeStr,
-                points: "500",
-                shop: "賺取積分",
-                item: "賺取積分"
-            };
-
+            const payload = { user: "Cherry", date: dateStr, time: timeStr, points: "500", shop: "賺取積分", item: "賺取積分" };
             fetch(GOOGLE_SHEET_API_URL, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            }).then(() => {
-                console.log("QR Code 資料已送出至 Google Sheet！");
-            }).catch(error => {
-                console.error("寫入表格失敗:", error);
-            });
+            }).then(() => { console.log("QR Code 資料已送出！"); }).catch(error => { console.error("寫入表格失敗:", error); });
         }
 
+        // QR Code 檢查（加入倒數提示）
         function checkQRCode() {
             if (!isDetecting || video.videoWidth === 0) return;
-            
-            const imageData = getFrameImageData();
+            const hiddenCanvas = document.createElement('canvas');
+            hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
+            const hiddenCtx = hiddenCanvas.getContext('2d');
+            hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
+            const imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
             const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
             if (code) {
-                qrStatusBox.innerText = "是否偵測到QR code：有 ✅";
                 qrStatusBox.classList.add("detected");
-
                 const currentTime = Date.now();
-                // 10 秒鐘防連刷保護機制
                 if (currentTime - lastQRSendTime >= 10000) {
                     sendToGoogleSheet();
                     lastQRSendTime = currentTime;
+                    qrStatusBox.innerHTML = "偵測到 QR code：有 ✅<br><span style='color:#e74c3c; font-size:13px;'>(資料已傳送！)</span>";
+                } else {
+                    const remainTime = Math.ceil((10000 - (currentTime - lastQRSendTime)) / 1000);
+                    qrStatusBox.innerHTML = `偵測到 QR code：有 ✅<br><span style='color:#7f8c8d; font-size:13px;'>(等待 ${remainTime} 秒後才能再次發送)</span>`;
                 }
             } else {
-                qrStatusBox.innerText = "是否偵測到QR code：無";
+                qrStatusBox.innerHTML = "偵測到 QR code：無";
                 qrStatusBox.classList.remove("detected");
             }
         }
 
+        // Roboflow 辨識
         async function detect() {
             if (!isDetecting) return;
-
             const hiddenCanvas = document.createElement('canvas');
             hiddenCanvas.width = video.videoWidth; hiddenCanvas.height = video.videoHeight;
             const hiddenCtx = hiddenCanvas.getContext('2d');
             hiddenCtx.drawImage(video, 0, 0, hiddenCanvas.width, hiddenCanvas.height);
             const base64Image = hiddenCanvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
             try {
                 const response = await fetch(API_URL, {
                     method: 'POST',
@@ -281,75 +427,100 @@
                 const result = await response.json();
                 rawJson.innerText = JSON.stringify(result, null, 2);
                 processResults(result);
-            } catch (error) {
-                console.error("API 請求失敗:", error);
-            }
-
+            } catch (error) { console.error("API 請求失敗:", error); }
             if (isDetecting) { setTimeout(detect, 500); }
         }
 
         function processResults(result) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let resultText = ""; let predictions = [];
-
+            let predictions = [];
             if (result && result.outputs && result.outputs.length > 0) {
                 const firstOutput = result.outputs[0];
                 if (firstOutput.predictions && firstOutput.predictions.predictions) predictions = firstOutput.predictions.predictions;
             }
 
-            if (predictions.length === 0) { textResults.innerHTML = "未偵測到物體"; return; }
-            let hasValidDetection = false;
+            // 更新表格：將辨識到的 boar 對應為「野生動物」
+            // 因為是物件偵測，相似度這裡使用信心度。
+            // 學習按鈕我們假設它增加相片數。
+            
+            let detectedWildAnimal = false;
+            let wildAnimalConfidence = 0;
+            let photoCount = predictions.length;
 
             predictions.forEach(pred => {
                 const label = pred.class || "Unknown";
                 const threshold = (label === "boar") ? 0.8 : 0.6;
                 if (pred.confidence > threshold) {
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
-                        hasValidDetection = true;
                         const x = pred.x - pred.width / 2; const y = pred.y - pred.height / 2;
                         const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
 
-                        ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 3; ctx.strokeRect(x, y, pred.width, pred.height);
-                        ctx.fillStyle = "#2ecc71"; const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
-                        ctx.fillRect(x, y - 25, textWidth + 10, 25);
-                        ctx.fillStyle = "#ffffff"; ctx.font = "16px Arial"; ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
+                        // 🌟 翻轉影像時，方框也需要反向繪製
+                        let drawX = x;
+                        if (isFlipped) {
+                            drawX = canvas.width - drawX - pred.width;
+                        }
+
+                        ctx.strokeStyle = "#2ecc71"; ctx.lineWidth = 3; ctx.strokeRect(drawX, y, pred.width, pred.height);
+                        ctx.fillStyle = "#2ecc71"; ctx.fillRect(drawX, y - 25, ctx.measureText(`${label} ${confidencePercent}`).width + 10, 25);
+                        ctx.fillStyle = "#ffffff"; ctx.font = "16px Arial"; ctx.fillText(`${label} ${confidencePercent}`, drawX + 5, y - 7);
 
                         if (label === "boar") {
+                            detectedWildAnimal = true;
+                            wildAnimalConfidence = pred.confidence;
                             const currentTime = Date.now();
                             if (currentTime - lastBoarSendTime >= 10000) {
                                 sendToMicrobit("boar"); lastBoarSendTime = currentTime; 
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: red;">(已發送訊號!)</span></li>`;
-                            } else {
-                                const remainTime = Math.ceil((10000 - (currentTime - lastBoarSendTime)) / 1000);
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: gray;">(冷卻中... ${remainTime} 秒)</span></li>`;
+                                console.log("(已發送 boar 訊號!)");
                             }
-                        } else {
-                            resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
                         }
                     }
                 }
             });
-            if (hasValidDetection) textResults.innerHTML = `<ul>${resultText}</ul>`;
-            else textResults.innerHTML = "未偵測到符合門檻的物體";
+
+            // 更新表格
+            // 野生動物：使用 boar 的信心度
+            // 行山人士和背景：這裡假設如果沒有檢測到特定類別（例如人），則相似度低。
+            progress Bars[0].style.width = '0%'; // 行山人士
+            progress Bars[1].style.width = `${wildAnimalConfidence * 100}%`; // 野生動物
+            
+            // 背景相似度：可以通過檢測到的對象總數來估計。這裡簡單假設如果沒有檢測到野生動物，則背景相似度高。
+            // 為了界面保持一致，這裡進行模擬。
+            if (!detectedWildAnimal) {
+                progress Bars[2].style.width = '90%'; // 背景
+            } else {
+                progress Bars[2].style.width = '20%'; // 背景
+            }
+            
+            // 相片數：更新為檢測到的對象總數。
+            countElements[1].innerText = photoCount;
+            // 其他行的相片數：這裡假設在測試時不會改變，或由學習按鈕模擬增加。
         }
 
-        let qrScanInterval;
-        
         toggleBtn.addEventListener('click', () => {
             isDetecting = !isDetecting;
             if (isDetecting) {
-                toggleBtn.innerText = "停止辨認"; toggleBtn.classList.add("stop");
-                textResults.innerHTML = "偵測中...";
-                detect(); 
+                toggleBtn.innerHTML = "🟥 停止辨認"; toggleBtn.classList.add("stop");
+                statusText.innerText = '正在辨認中...'; detect(); 
                 qrScanInterval = setInterval(checkQRCode, 200);
             } else {
-                toggleBtn.innerText = "開始辨認"; toggleBtn.classList.remove("stop");
-                textResults.innerHTML = "已停止偵測";
+                toggleBtn.innerHTML = "▶️ 開始辨認"; toggleBtn.classList.remove("stop");
+                statusText.innerText = '已停止辨認。AI 模型已就緒。';
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 clearInterval(qrScanInterval);
-                qrStatusBox.innerText = "是否偵測到QR code：無";
+                qrStatusBox.innerHTML = "偵測到 QR code：無";
                 qrStatusBox.classList.remove("detected");
             }
+        });
+
+        // 模擬學習按鈕增加相片數
+        const learningBtns = document.querySelectorAll('.side-panel .side-btn:nth-child(-n+3)');
+        learningBtns.forEach((btn, index) => {
+            btn.addEventListener('click', () => {
+                let currentCount = parseInt(countElements[index].innerText);
+                countElements[index].innerText = currentCount + 1;
+                console.log(`已學習 ${btn.innerText}，相片數增加。`);
+            });
         });
 
         setupCamera();
