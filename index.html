@@ -91,7 +91,7 @@
 </head>
 <body>
 
-    <h1>郊野公園智能垃圾桶V2</h1>
+    <h1>郊野公園智能垃圾桶</h1>
 
     <div id="controls">
         <button id="toggleBtn">開始辨認</button>
@@ -203,7 +203,7 @@
             let resultText = "";
             let predictions = [];
 
-            // 🌟 根據你提供的 JSON 結構，精準抓取深層的 predictions 陣列
+            // 🌟 抓取深層的 predictions 陣列
             if (result && result.outputs && result.outputs.length > 0) {
                 const firstOutput = result.outputs[0];
                 if (firstOutput.predictions && firstOutput.predictions.predictions) {
@@ -216,41 +216,50 @@
                 return;
             }
 
+            let hasValidDetection = false;
+
             // 繪製每個預測結果
             predictions.forEach(pred => {
-                // 確認預測資料是否有座標與長寬
-                if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
+                // 🛑 新增過濾條件：信心度必須大於 0.6 (60%) 才會進行標示
+                if (pred.confidence > 0.6) {
                     
-                    // Roboflow 給的是中心點 (x,y)，需要轉換成左上角座標來畫框
-                    const x = pred.x - pred.width / 2;
-                    const y = pred.y - pred.height / 2;
-                    const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
-                    const label = pred.class || "Unknown";
+                    // 確認預測資料是否有座標與長寬
+                    if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
+                        
+                        hasValidDetection = true;
 
-                    // 畫綠色方框
-                    ctx.strokeStyle = "#2ecc71"; // 綠色
-                    ctx.lineWidth = 3;
-                    ctx.strokeRect(x, y, pred.width, pred.height);
+                        // Roboflow 給的是中心點 (x,y)，需要轉換成左上角座標來畫框
+                        const x = pred.x - pred.width / 2;
+                        const y = pred.y - pred.height / 2;
+                        const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
+                        const label = pred.class || "Unknown";
 
-                    // 畫標籤背景
-                    ctx.fillStyle = "#2ecc71";
-                    const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
-                    ctx.fillRect(x, y - 25, textWidth + 10, 25);
+                        // 畫綠色方框
+                        ctx.strokeStyle = "#2ecc71"; // 綠色
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(x, y, pred.width, pred.height);
 
-                    // 寫入標籤與信心度 (%)
-                    ctx.fillStyle = "#ffffff";
-                    ctx.font = "16px Arial";
-                    ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
+                        // 畫標籤背景
+                        ctx.fillStyle = "#2ecc71";
+                        const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
+                        ctx.fillRect(x, y - 25, textWidth + 10, 25);
 
-                    // 組合下方文字結果
-                    resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
+                        // 寫入標籤與信心度 (%)
+                        ctx.fillStyle = "#ffffff";
+                        ctx.font = "16px Arial";
+                        ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
+
+                        // 組合下方文字結果
+                        resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
+                    }
                 }
             });
 
-            if (resultText !== "") {
+            // 根據是否有符合條件的物體來更新文字
+            if (hasValidDetection) {
                 textResults.innerHTML = `<ul>${resultText}</ul>`;
             } else {
-                textResults.innerHTML = "無法解析偵測結果的座標結構。";
+                textResults.innerHTML = "未偵測到信心度超過 60% 的物體";
             }
         }
 
