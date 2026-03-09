@@ -91,7 +91,7 @@
 </head>
 <body>
 
-    <h1>郊野公園智能垃圾桶</h1>
+    <h1>郊野公園智能垃圾桶V2</h1>
 
     <div id="controls">
         <button id="toggleBtn">開始辨認</button>
@@ -201,23 +201,13 @@
             // 清除上一幀的畫布
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             let resultText = "";
-
-            // Roboflow Workflow 的回傳結構可能因設計而異，
-            // 這裡嘗試尋找最常見的陣列格式 (包含 class, confidence, x, y, width, height)
             let predictions = [];
-            
-            // 尋找 JSON 中的預測陣列 (這裡涵蓋了幾種 Roboflow 常見的回傳結構)
-            if (Array.isArray(result)) {
-                predictions = result;
-            } else if (result && result.predictions) {
-                predictions = result.predictions;
-            } else if (result) {
-                // 如果是 workflow，可能在某個步驟的輸出裡
-                for (const key in result) {
-                    if (Array.isArray(result[key]) && result[key][0] && result[key][0].class) {
-                        predictions = result[key];
-                        break;
-                    }
+
+            // 🌟 根據你提供的 JSON 結構，精準抓取深層的 predictions 陣列
+            if (result && result.outputs && result.outputs.length > 0) {
+                const firstOutput = result.outputs[0];
+                if (firstOutput.predictions && firstOutput.predictions.predictions) {
+                    predictions = firstOutput.predictions.predictions;
                 }
             }
 
@@ -228,13 +218,14 @@
 
             // 繪製每個預測結果
             predictions.forEach(pred => {
-                // 確認預測資料是否有座標與長寬 (Roboflow 通常回傳中心點 x, y)
+                // 確認預測資料是否有座標與長寬
                 if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
                     
+                    // Roboflow 給的是中心點 (x,y)，需要轉換成左上角座標來畫框
                     const x = pred.x - pred.width / 2;
                     const y = pred.y - pred.height / 2;
                     const confidencePercent = (pred.confidence * 100).toFixed(1) + "%";
-                    const label = pred.class || pred.name || "Unknown";
+                    const label = pred.class || "Unknown";
 
                     // 畫綠色方框
                     ctx.strokeStyle = "#2ecc71"; // 綠色
@@ -243,7 +234,8 @@
 
                     // 畫標籤背景
                     ctx.fillStyle = "#2ecc71";
-                    ctx.fillRect(x, y - 25, ctx.measureText(`${label} ${confidencePercent}`).width + 10, 25);
+                    const textWidth = ctx.measureText(`${label} ${confidencePercent}`).width;
+                    ctx.fillRect(x, y - 25, textWidth + 10, 25);
 
                     // 寫入標籤與信心度 (%)
                     ctx.fillStyle = "#ffffff";
