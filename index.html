@@ -192,7 +192,7 @@
                 是否偵測到QR code：無
             </div>
             
-            <button class="side-btn btn-green" onclick="alert('開啟垃圾桶及存取積分功能建置中...')">開啟垃圾桶及<br>存取積分</button>
+            <button id="openBinBtn" class="side-btn btn-green">開啟垃圾桶及<br>存取積分</button>
             <button class="side-btn btn-blue" onclick="alert('現在位置及相鄰垃圾桶功能建置中...')">現在位置及<br>相鄰垃圾桶</button>
         </div>
     </div>
@@ -217,6 +217,9 @@
         const rawJson = document.getElementById('raw-json');
         const qrStatusBox = document.getElementById('qrStatusBox');
         
+        // 🌟 按鈕綁定
+        const openBinBtn = document.getElementById('openBinBtn');
+        
         // Google Apps Script URL
         const GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwjSH4IHmhBsC8HYax3K4MvyPN3JWhZ71uxQMpIzmXMVZGqgU-9EO_k2TFZec3ZSTi1/exec";
 
@@ -232,7 +235,7 @@
         let isDetecting = false;
         let serialPort = null;
         let serialWriter = null;
-        let lastBoarSendTime = 0; 
+        let lastDetectionSendTime = 0; // 🌟 改名為通用偵測時間
         let lastQRSendTime = 0;
 
         const API_KEY = 's1Lu70khq7Ymo6iCuiFw';
@@ -255,8 +258,16 @@
         async function sendToMicrobit(text) {
             if (serialWriter) {
                 try { await serialWriter.write(text + "\n"); } catch (error) { console.error("寫入 Micro:bit 失敗:", error); }
+            } else {
+                console.log(`(模擬) 未連接 Micro:bit，但嘗試發送訊號：${text}`);
             }
         }
+
+        // 🌟 點擊「開啟垃圾桶及存取積分」發送 Result1
+        openBinBtn.addEventListener('click', () => {
+            sendToMicrobit("Result1");
+            alert("已發送指令 (Result1) 至 Micro:bit！");
+        });
 
         async function setupCamera() {
             try {
@@ -365,7 +376,9 @@
 
             predictions.forEach(pred => {
                 const label = pred.class || "Unknown";
-                const threshold = (label === "boar") ? 0.8 : 0.6;
+                // 🌟 門檻統一降至 0.5 (50%)
+                const threshold = 0.5;
+
                 if (pred.confidence > threshold) {
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
                         hasValidDetection = true;
@@ -377,23 +390,21 @@
                         ctx.fillRect(x, y - 25, textWidth + 10, 25);
                         ctx.fillStyle = "#ffffff"; ctx.font = "16px Arial"; ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
 
-                        if (label === "boar") {
-                            const currentTime = Date.now();
-                            if (currentTime - lastBoarSendTime >= 10000) {
-                                sendToMicrobit("boar"); lastBoarSendTime = currentTime; 
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: red;">(已發送訊號!)</span></li>`;
-                            } else {
-                                const remainTime = Math.ceil((10000 - (currentTime - lastBoarSendTime)) / 1000);
-                                resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: gray;">(冷卻中... ${remainTime} 秒)</span></li>`;
-                            }
+                        // 🌟 只要偵測到結果 (大於0.5)，就發送 Result2
+                        const currentTime = Date.now();
+                        if (currentTime - lastDetectionSendTime >= 10000) {
+                            sendToMicrobit("Result2"); 
+                            lastDetectionSendTime = currentTime; 
+                            resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: red;">(已發送 Result2 訊號!)</span></li>`;
                         } else {
-                            resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent}</li>`;
+                            const remainTime = Math.ceil((10000 - (currentTime - lastDetectionSendTime)) / 1000);
+                            resultText += `<li><strong>${label}</strong> - 信心度: ${confidencePercent} <span style="color: gray;">(冷卻中... ${remainTime} 秒)</span></li>`;
                         }
                     }
                 }
             });
             if (hasValidDetection) textResults.innerHTML = `<ul>${resultText}</ul>`;
-            else textResults.innerHTML = "未偵測到符合門檻的物體";
+            else textResults.innerHTML = "未偵測到符合門檻 (大於 50%) 的物體";
         }
 
         let qrScanInterval;
