@@ -104,16 +104,16 @@
         .side-panel {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
             width: 260px;
         }
 
         /* 灰藍色 QR Code 狀態列 */
         .qr-status {
             background-color: #d8e1e8;
-            padding: 20px 15px;
+            padding: 15px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
             color: #333;
             border: 2px solid #bdc3c7;
@@ -126,6 +126,23 @@
             border-color: #2ecc71;
         }
 
+        /* 🌟 新增：左右垃圾桶存量狀態方塊 */
+        .bin-status {
+            background-color: #ecf0f1;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: bold;
+            color: #7f8c8d;
+            border: 2px solid #bdc3c7;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        /* 垃圾桶狀態顏色 */
+        .bin-full { background-color: #fadbd8; color: #c0392b; border-color: #e74c3c; } /* 已滿：紅色 */
+        .bin-med { background-color: #fcf3cf; color: #d35400; border-color: #f39c12; }  /* 中等：橘黃色 */
+        .bin-empty { background-color: #d5f5e3; color: #27ae60; border-color: #2ecc71; } /* 空：綠色 */
+
         /* 右側功能按鈕通用樣式 */
         .side-btn {
             color: white;
@@ -133,16 +150,15 @@
             border-radius: 8px;
             font-size: 16px;
             font-weight: bold;
-            padding: 25px 15px;
+            padding: 20px 15px;
             cursor: pointer;
             transition: opacity 0.3s;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         .side-btn:hover { opacity: 0.85; }
         
-        /* 綠色功能按鈕 */
+        /* 綠色/藍色功能按鈕 */
         .btn-green { background-color: #347b38; }
-        /* 藍色功能按鈕 */
         .btn-blue { background-color: #0080c5; }
 
         /* 底部除錯與結果資訊區塊 */
@@ -194,6 +210,9 @@
             
             <button id="openBinBtn" class="side-btn btn-green">開啟垃圾桶及<br>存取積分</button>
             <button class="side-btn btn-blue" onclick="alert('現在位置及相鄰垃圾桶功能建置中...')">現在位置及<br>相鄰垃圾桶</button>
+
+            <div id="leftBinStatus" class="bin-status">左方垃圾桶：未知</div>
+            <div id="rightBinStatus" class="bin-status">右方垃圾桶：未知</div>
         </div>
     </div>
 
@@ -217,8 +236,12 @@
         const rawJson = document.getElementById('raw-json');
         const qrStatusBox = document.getElementById('qrStatusBox');
         
-        // 🌟 按鈕綁定
+        // 按鈕綁定
         const openBinBtn = document.getElementById('openBinBtn');
+        
+        // 🌟 垃圾桶狀態綁定
+        const leftBinBox = document.getElementById('leftBinStatus');
+        const rightBinBox = document.getElementById('rightBinStatus');
         
         // Google Apps Script URL
         const GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwjSH4IHmhBsC8HYax3K4MvyPN3JWhZ71uxQMpIzmXMVZGqgU-9EO_k2TFZec3ZSTi1/exec";
@@ -235,23 +258,33 @@
         let isDetecting = false;
         let serialPort = null;
         let serialWriter = null;
-        let lastDetectionSendTime = 0; // 🌟 改名為通用偵測時間
+        let lastDetectionSendTime = 0; 
         let lastQRSendTime = 0;
 
         const API_KEY = 's1Lu70khq7Ymo6iCuiFw';
         const API_URL = 'https://serverless.roboflow.com/harrys-workspace-wrtc8/workflows/custom-workflow-2';
 
+        // ==========================================
+        // Web Serial API (連接、發送與接收)
+        // ==========================================
         connectSerialBtn.addEventListener('click', async () => {
             if (!('serial' in navigator)) { alert("瀏覽器不支援 Web Serial API"); return; }
             try {
                 serialPort = await navigator.serial.requestPort();
                 await serialPort.open({ baudRate: 115200 });
+                
+                // 設定寫入串流 (發送資料給 Micro:bit)
                 const textEncoder = new TextEncoderStream();
                 textEncoder.readable.pipeTo(serialPort.writable);
                 serialWriter = textEncoder.writable.getWriter();
+                
                 connectSerialBtn.innerText = "Micro:bit 已連接 ✅";
                 connectSerialBtn.disabled = true;
                 connectSerialBtn.style.backgroundColor = "#27ae60";
+
+                // 🌟 啟動讀取迴圈 (接收來自 Micro:bit 的資料)
+                readSerialLoop();
+
             } catch (error) { console.error("連接序列埠失敗:", error); }
         });
 
@@ -263,7 +296,65 @@
             }
         }
 
-        // 🌟 點擊「開啟垃圾桶及存取積分」發送 Result1
+        // 🌟 新增：持續讀取 Micro:bit 傳來的資料
+        async function readSerialLoop() {
+            const textDecoder = new TextDecoderStream();
+            const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
+            const reader = textDecoder.readable.getReader();
+            let buffer = "";
+
+            try {
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    if (value) {
+                        buffer += value;
+                        // 以換行符號分割收到的資料 (處理可能一次收到多行或不完整行的狀況)
+                        let lines = buffer.split(/\r?\n/);
+                        buffer = lines.pop(); // 把最後不完整的片段留到下一次
+                        
+                        for (let line of lines) {
+                            let cmd = line.trim();
+                            if (cmd) {
+                                console.log("收到 Micro:bit 訊號: ", cmd);
+                                updateBinStatus(cmd); // 呼叫更新畫面的函數
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("讀取 Serial 發生錯誤:", error);
+            } finally {
+                reader.releaseLock();
+            }
+        }
+
+        // 🌟 新增：根據收到的指令更新垃圾桶狀態方塊
+        function updateBinStatus(cmd) {
+            if (cmd === 'L1') {
+                leftBinBox.innerHTML = "左方垃圾桶：已滿 🔴";
+                leftBinBox.className = "bin-status bin-full";
+            } else if (cmd === 'L2') {
+                leftBinBox.innerHTML = "左方垃圾桶：中等滿 🟡";
+                leftBinBox.className = "bin-status bin-med";
+            } else if (cmd === 'L3') {
+                leftBinBox.innerHTML = "左方垃圾桶：空 🟢";
+                leftBinBox.className = "bin-status bin-empty";
+            } else if (cmd === 'R1') {
+                rightBinBox.innerHTML = "右方垃圾桶：已滿 🔴";
+                rightBinBox.className = "bin-status bin-full";
+            } else if (cmd === 'R2') {
+                rightBinBox.innerHTML = "右方垃圾桶：中等滿 🟡";
+                rightBinBox.className = "bin-status bin-med";
+            } else if (cmd === 'R3') {
+                rightBinBox.innerHTML = "右方垃圾桶：空 🟢";
+                rightBinBox.className = "bin-status bin-empty";
+            }
+        }
+
+        // ==========================================
+        // 按鈕事件與攝影機初始化
+        // ==========================================
         openBinBtn.addEventListener('click', () => {
             sendToMicrobit("Result1");
             alert("已發送指令 (Result1) 至 Micro:bit！");
@@ -285,6 +376,9 @@
             return hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
         }
 
+        // ==========================================
+        // Google Sheet & QR Code 邏輯
+        // ==========================================
         function sendToGoogleSheet() {
             if (!GOOGLE_SHEET_API_URL) return;
 
@@ -337,6 +431,9 @@
             }
         }
 
+        // ==========================================
+        // Roboflow 物件辨識邏輯
+        // ==========================================
         async function detect() {
             if (!isDetecting) return;
 
@@ -376,8 +473,7 @@
 
             predictions.forEach(pred => {
                 const label = pred.class || "Unknown";
-                // 🌟 門檻統一降至 0.5 (50%)
-                const threshold = 0.5;
+                const threshold = 0.5; // 門檻 50%
 
                 if (pred.confidence > threshold) {
                     if (pred.x !== undefined && pred.y !== undefined && pred.width && pred.height) {
@@ -390,7 +486,7 @@
                         ctx.fillRect(x, y - 25, textWidth + 10, 25);
                         ctx.fillStyle = "#ffffff"; ctx.font = "16px Arial"; ctx.fillText(`${label} ${confidencePercent}`, x + 5, y - 7);
 
-                        // 🌟 只要偵測到結果 (大於0.5)，就發送 Result2
+                        // 偵測到結果，發送 Result2
                         const currentTime = Date.now();
                         if (currentTime - lastDetectionSendTime >= 10000) {
                             sendToMicrobit("Result2"); 
