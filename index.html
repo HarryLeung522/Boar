@@ -126,19 +126,22 @@
             border-color: #2ecc71;
         }
 
-        /* 🌟 新增：左右垃圾桶存量狀態方塊 */
+        /* 🌟 更新：加長加大的垃圾桶存量狀態方塊 */
         .bin-status {
             background-color: #ecf0f1;
-            padding: 12px;
+            padding: 25px 10px; /* 上下加長 padding */
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: bold;
             color: #7f8c8d;
             border: 2px solid #bdc3c7;
             text-align: center;
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
         }
-        /* 垃圾桶狀態顏色 */
         .bin-full { background-color: #fadbd8; color: #c0392b; border-color: #e74c3c; } /* 已滿：紅色 */
         .bin-med { background-color: #fcf3cf; color: #d35400; border-color: #f39c12; }  /* 中等：橘黃色 */
         .bin-empty { background-color: #d5f5e3; color: #27ae60; border-color: #2ecc71; } /* 空：綠色 */
@@ -156,10 +159,25 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
         .side-btn:hover { opacity: 0.85; }
-        
-        /* 綠色/藍色功能按鈕 */
         .btn-green { background-color: #347b38; }
         .btn-blue { background-color: #0080c5; }
+
+        /* 🌟 新增：收發訊息日誌區塊 */
+        .msg-log {
+            background-color: #fff;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #2c3e50;
+            border: 1px solid #bdc3c7;
+            text-align: left;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+        .msg-log span {
+            color: #e67e22; /* 突顯收到或發出的字眼 */
+            font-weight: bold;
+        }
 
         /* 底部除錯與結果資訊區塊 */
         .info-box {
@@ -213,6 +231,9 @@
 
             <div id="leftBinStatus" class="bin-status">左方垃圾桶：未知</div>
             <div id="rightBinStatus" class="bin-status">右方垃圾桶：未知</div>
+
+            <div class="msg-log">📥 收到：<span id="msgReceived">無</span></div>
+            <div class="msg-log">📤 發送：<span id="msgSent">無</span></div>
         </div>
     </div>
 
@@ -239,9 +260,11 @@
         // 按鈕綁定
         const openBinBtn = document.getElementById('openBinBtn');
         
-        // 🌟 垃圾桶狀態綁定
+        // 垃圾桶狀態與通訊日誌綁定
         const leftBinBox = document.getElementById('leftBinStatus');
         const rightBinBox = document.getElementById('rightBinStatus');
+        const msgReceivedSpan = document.getElementById('msgReceived');
+        const msgSentSpan = document.getElementById('msgSent');
         
         // Google Apps Script URL
         const GOOGLE_SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwjSH4IHmhBsC8HYax3K4MvyPN3JWhZ71uxQMpIzmXMVZGqgU-9EO_k2TFZec3ZSTi1/exec";
@@ -273,7 +296,7 @@
                 serialPort = await navigator.serial.requestPort();
                 await serialPort.open({ baudRate: 115200 });
                 
-                // 設定寫入串流 (發送資料給 Micro:bit)
+                // 設定寫入串流
                 const textEncoder = new TextEncoderStream();
                 textEncoder.readable.pipeTo(serialPort.writable);
                 serialWriter = textEncoder.writable.getWriter();
@@ -282,21 +305,26 @@
                 connectSerialBtn.disabled = true;
                 connectSerialBtn.style.backgroundColor = "#27ae60";
 
-                // 🌟 啟動讀取迴圈 (接收來自 Micro:bit 的資料)
+                // 啟動讀取迴圈
                 readSerialLoop();
 
             } catch (error) { console.error("連接序列埠失敗:", error); }
         });
 
         async function sendToMicrobit(text) {
+            msgSentSpan.innerText = text; // 🌟 更新「發送」狀態列
             if (serialWriter) {
-                try { await serialWriter.write(text + "\n"); } catch (error) { console.error("寫入 Micro:bit 失敗:", error); }
+                try { 
+                    await serialWriter.write(text + "\n"); 
+                } catch (error) { 
+                    console.error("寫入 Micro:bit 失敗:", error); 
+                }
             } else {
                 console.log(`(模擬) 未連接 Micro:bit，但嘗試發送訊號：${text}`);
             }
         }
 
-        // 🌟 新增：持續讀取 Micro:bit 傳來的資料
+        // 持續讀取 Micro:bit 傳來的資料
         async function readSerialLoop() {
             const textDecoder = new TextDecoderStream();
             const readableStreamClosed = serialPort.readable.pipeTo(textDecoder.writable);
@@ -309,15 +337,16 @@
                     if (done) break;
                     if (value) {
                         buffer += value;
-                        // 以換行符號分割收到的資料 (處理可能一次收到多行或不完整行的狀況)
+                        // 自動切割 \r\n，確保即使是 "寫入一行文字" 也能正確判讀
                         let lines = buffer.split(/\r?\n/);
-                        buffer = lines.pop(); // 把最後不完整的片段留到下一次
+                        buffer = lines.pop(); // 保留不完整的片段
                         
                         for (let line of lines) {
                             let cmd = line.trim();
                             if (cmd) {
                                 console.log("收到 Micro:bit 訊號: ", cmd);
-                                updateBinStatus(cmd); // 呼叫更新畫面的函數
+                                msgReceivedSpan.innerText = cmd; // 🌟 更新「收到」狀態列
+                                updateBinStatus(cmd); 
                             }
                         }
                     }
@@ -329,7 +358,6 @@
             }
         }
 
-        // 🌟 新增：根據收到的指令更新垃圾桶狀態方塊
         function updateBinStatus(cmd) {
             if (cmd === 'L1') {
                 leftBinBox.innerHTML = "左方垃圾桶：已滿 🔴";
